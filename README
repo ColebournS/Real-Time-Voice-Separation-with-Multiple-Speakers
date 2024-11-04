@@ -1,0 +1,32 @@
+# Real-Time Audio Separation Project
+
+## Table of Contents
+1. [Introduction](#introduction)
+2. [Installation](#installation)
+
+## Introduction
+This research project aims to analyze methods to separate audio with multiple speakers in real-time. The main problem is often referred to as the *cocktail party problem*, where humans can easily listen to one voice out of a noisy room, but it is a significant challenge for computers (Agrawal et al., 2023). This paper evaluates the real-time performance of several existing speech separation models to identify effective solutions for real-time voice separation.
+
+Potential applications of real-time voice separation span across several fields. One significant area is **Human-Robot Interaction (HRI)**, where robots equipped with voice recognition capabilities can improve their ability to understand and interact with multiple speakers simultaneously. Another application lies in **speech enhancement for communication systems**, where real-time voice separation can be used to improve audio quality in video conferencing systems by isolating individual speakers. **Assistive technologies** such as hearing aids could also benefit by providing users with the ability to focus on specific voices in noisy environments, thus improving accessibility for people with hearing impairments (Ravenscroft et al., 2024).
+
+Many state-of-the-art speech separation models, such as **ConvTasNet**, are designed with real-time capabilities in mind, with ConvTasNet specifically demonstrating low-latency performance suitable for real-time applications (Luo & Mesgarani, 2019). However, models like **SepFormer**, while achieving impressive results in speech separation tasks, are not optimized for real-time use due to their high computational demands and require substantial memory and processing power. Improving the computational efficiency and robustness of these models remains a challenge for real-time deployment.  
+
+This project will focus on testing how existing voice separation models, including SepFormer, RE-Sepformer, DPRNN, ConvTasNet, and DPTNet, perform in real-time scenarios with multiple speakers. Each of these models has shown promise in improving speech separation accuracy, but they are typically evaluated on pre-recorded, segmented audio files. The main goal here is to assess their performance with live, continuous audio streams, where real-time processing demands may introduce challenges like latency, computational strain, or performance degradation. By evaluating these models in practical, real-world conditions, this project will shed light on their capabilities and limitations in handling live audio.
+
+## Installation
+To set up the project environment, follow these steps:
+
+### 1. Clone the Repository
+Open your terminal and clone the repository to your local machine
+
+### 2. Create a Virtual Environment (Optional but Recommended)
+python -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
+
+### 3. Install Required Packages
+pip install -r requirements.txt
+
+
+### 4. Running the code
+To run the analysis and separation process, execute the following command:
+python scripts/main.py

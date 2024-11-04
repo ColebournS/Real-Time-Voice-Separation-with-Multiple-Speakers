@@ -1,0 +1,2 @@
+model,window_duration,overlap_ratio,num_windows,total_separation_time,average_window_time,std_window_time,sdr,sir,sar
+resepformer-wsj02mix,2.0,0.0,4,3.000837802886963,0.7502094507217407,0.12979949313383973,1.3370879243048812,7.79862214667141,3.324567219503512

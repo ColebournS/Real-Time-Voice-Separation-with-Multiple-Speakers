@@ -1,0 +1,14 @@
+[
+    {
+        "model": "resepformer-wsj02mix",
+        "window_duration": 2.0,
+        "overlap_ratio": 0.0,
+        "num_windows": 4,
+        "total_separation_time": 5.28434944152832,
+        "average_window_time": 1.32108736038208,
+        "std_window_time": 0.22799472448439287,
+        "sdr": 1.3370879243048812,
+        "sir": 7.79862214667141,
+        "sar": 3.324567219503512
+    }
+]
