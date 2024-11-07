@@ -127,7 +127,7 @@ def verify_and_swap_sources(est_sources, separated1, separated2, start_index):
     if (sim2_source1['mean_squared_error'] < sim2_source2['mean_squared_error']):
         score_source2 += 1
     
-    print(f"Score for Source 1: {score_source1}, Score for Source 2: {score_source2}")
+    # print(f"Score for Source 1: {score_source1}, Score for Source 2: {score_source2}")
 
     # Determine if sources need to be swapped based on scores
     if score_source1 > score_source2:
@@ -176,7 +176,7 @@ def separate_audio_windows(mixture_path, clean1_path, clean2_path, window_durati
     results = {}
     for model_name in model_names:
         try:
-            print(f"\nProcessing with {model_name} - Window duration: {window_duration_seconds:.1f}s, Overlap: {overlap_ratio:.1%}")
+            print(f"Processing with {model_name} - Window duration: {window_duration_seconds:.1f}s, Overlap: {overlap_ratio:.1%}")
             model_dir = os.path.join("models", model_name)
             output_dir = os.path.join(results_dir, model_name, 
                                        f"window_{window_duration_seconds:.1f}s_overlap_{overlap_ratio:.1%}")
@@ -221,7 +221,11 @@ def separate_audio_windows(mixture_path, clean1_path, clean2_path, window_durati
                     os.remove(temp_mixture_path)
                     continue  # Skip this window if separation fails
                 
-                est_sources = verify_and_swap_sources(est_sources, separated_1, separated_2, start_sample - current_window_size)
+                #if the first window then we dont need to try to swap the sources
+                if(i != 0):
+                    prev_window_start = max(0, start_sample - current_window_size)
+                    est_sources = verify_and_swap_sources(est_sources, separated_1, separated_2, prev_window_start)
+                
                 window_time = time.time() - start_time
                 window_times.append(window_time)
                 total_separation_time += window_time
@@ -239,7 +243,7 @@ def separate_audio_windows(mixture_path, clean1_path, clean2_path, window_durati
                     normalization[:, start_sample:end_sample] += window
 
                 os.remove(temp_mixture_path)
-                print(f"\n\nWindow {i + 1}/{num_windows} processed in {window_time:.2f} seconds")
+                print(f"Window {i + 1}/{num_windows} processed in {window_time:.2f} seconds")
 
             eps = 1e-10
             separated_1 = separated_1 / (normalization + eps)
