@@ -7,135 +7,57 @@ import mir_eval
 from math import ceil
 from speechbrain.inference import SepformerSeparation
 import warnings
+from dtw import dtw
+from fastdtw import fastdtw
+from scipy.spatial.distance import euclidean
+from concurrent.futures import ThreadPoolExecutor
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-def compute_similarity_measures(x, y, start_index):
+import torch
+
+def compute_dtw(x, y):
+    """Compute approximate DTW using FastDTW for faster execution."""
     try:
-        min_length = min(x.size(0), y.size(0))
-
-        # Slice the larger tensor only to keep the desired segment
-        if x.size(0) > y.size(0):
-            print(f"\t\t\tSlicing x from index {start_index} to {start_index + min_length}")
-            x = x[start_index:start_index + min_length]
-        else:
-            print(f"\t\t\tSlicing y from index {start_index} to {start_index + min_length}")
-            y = y[start_index:start_index + min_length]
-
-        # Center both tensors for correlation computation
-        x_mean = x.mean()
-        y_mean = y.mean()
-        
-        x_centered = x - x_mean
-        y_centered = y - y_mean
-        
-        # Compute normalized cross-correlation
-        cross_corr = torch.sum(x_centered * y_centered) / (torch.sqrt(torch.sum(x_centered**2) * torch.sum(y_centered**2)) + 1e-10)
-
-        # Compute Euclidean Distance
-        euclidean_distance = torch.norm(x - y)
-
-        # Compute Cosine Similarity
-        cosine_similarity = torch.nn.functional.cosine_similarity(x.view(1, -1), y.view(1, -1))
-
-        # Compute Mean Squared Error
-        mse = torch.mean((x - y) ** 2)
-
-        return {
-            'cross_correlation': cross_corr,
-            'euclidean_distance': euclidean_distance,
-            'cosine_similarity': cosine_similarity,
-            'mean_squared_error': mse
-        }
-
+        # Use FastDTW with Euclidean distance
+        distance, _ = fastdtw(x, y, dist=euclidean)
+        return distance
     except Exception as e:
-        print(f"Error computing similarity measures: {e}")
-        return {
-            'cross_correlation': torch.tensor(0.0),
-            'euclidean_distance': torch.tensor(float('inf')),
-            'cosine_similarity': torch.tensor(0.0),
-            'mean_squared_error': torch.tensor(float('inf'))
-        }
-
+        print(f"Error computing DTW: {e}")
+        return float('inf')  # Return a high DTW distance in case of error
 
 def verify_and_swap_sources(est_sources, separated1, separated2, start_index):
-    """
-    Verify that the estimated sources match the original clean sources in terms of similarity.
+    # Slice once at the beginning to align lengths
+    min_length = min(est_sources.size(0), separated1.size(0), separated2.size(0))
+    source1 = est_sources[:min_length, :, 0].squeeze().cpu().numpy()
+    source2 = est_sources[:min_length, :, 1].squeeze().cpu().numpy()
+    separated1 = separated1[:min_length].squeeze().cpu().numpy()
+    separated2 = separated2[:min_length].squeeze().cpu().numpy()
     
-    Args:
-        est_sources (torch.Tensor): Estimated separated sources
-        separated1 (torch.Tensor): Separated first source so far
-        separated2 (torch.Tensor): Separated second source so far
-    
-    Returns:
-        torch.Tensor: Potentially reordered estimated sources
-    """
-    
-    # Extract the estimated sources
-    source1 = est_sources[:, :, 0]
-    source2 = est_sources[:, :, 1]
-    
-    # Compute similarity measures with clean sources
-    sim1_source1 = compute_similarity_measures(source1.squeeze(), separated1.squeeze(), start_index)
-    sim1_source2 = compute_similarity_measures(source1.squeeze(), separated2.squeeze(), start_index)
-    sim2_source1 = compute_similarity_measures(source2.squeeze(), separated1.squeeze(), start_index)
-    sim2_source2 = compute_similarity_measures(source2.squeeze(), separated2.squeeze(), start_index)
-    
-    # Print the similarity measures
-    print(f"Similarity measures for Source 1 with separated1: Cross-correlation = {sim1_source1['cross_correlation'].item():.4f}, "
-          f"Euclidean Distance = {sim1_source1['euclidean_distance'].item():.4f}, "
-          f"Cosine Similarity = {sim1_source1['cosine_similarity'].item():.4f}, "
-          f"MSE = {sim1_source1['mean_squared_error'].item():.4f}")
-    
-    print(f"Similarity measures for Source 1 with separated2: Cross-correlation = {sim1_source2['cross_correlation'].item():.4f}, "
-          f"Euclidean Distance = {sim1_source2['euclidean_distance'].item():.4f}, "
-          f"Cosine Similarity = {sim1_source2['cosine_similarity'].item():.4f}, "
-          f"MSE = {sim1_source2['mean_squared_error'].item():.4f}")
+    # Perform DTW calculations in parallel
+    with ThreadPoolExecutor() as executor:
+        dtw_source1_separated1 = executor.submit(compute_dtw, source1, separated1)
+        dtw_source1_separated2 = executor.submit(compute_dtw, source1, separated2)
+        dtw_source2_separated1 = executor.submit(compute_dtw, source2, separated1)
+        dtw_source2_separated2 = executor.submit(compute_dtw, source2, separated2)
 
-    print(f"Similarity measures for Source 2 with separated1: Cross-correlation = {sim2_source1['cross_correlation'].item():.4f}, "
-          f"Euclidean Distance = {sim2_source1['euclidean_distance'].item():.4f}, "
-          f"Cosine Similarity = {sim2_source1['cosine_similarity'].item():.4f}, "
-          f"MSE = {sim2_source1['mean_squared_error'].item():.4f}")
+        dtw_source1_separated1 = dtw_source1_separated1.result()
+        dtw_source1_separated2 = dtw_source1_separated2.result()
+        dtw_source2_separated1 = dtw_source2_separated1.result()
+        dtw_source2_separated2 = dtw_source2_separated2.result()
     
-    print(f"Similarity measures for Source 2 with separated2: Cross-correlation = {sim2_source2['cross_correlation'].item():.4f}, "
-          f"Euclidean Distance = {sim2_source2['euclidean_distance'].item():.4f}, "
-          f"Cosine Similarity = {sim2_source2['cosine_similarity'].item():.4f}, "
-          f"MSE = {sim2_source2['mean_squared_error'].item():.4f}")
+    # Print the DTW distances
+    print(f"DTW for Source 1 with separated1: {dtw_source1_separated1:.4f}")
+    print(f"DTW for Source 1 with separated2: {dtw_source1_separated2:.4f}")
+    print(f"DTW for Source 2 with separated1: {dtw_source2_separated1:.4f}")
+    print(f"DTW for Source 2 with separated2: {dtw_source2_separated2:.4f}")
     
-    # Initialize scores
-    score_source1 = 0
-    score_source2 = 0
-
-    # Increment scores based on better similarity metrics
-    # For Source 1 with separated1
-    if (sim1_source2['cross_correlation'] > sim1_source1['cross_correlation']):
-        score_source1 += 1
-    if (sim1_source2['euclidean_distance'] < sim1_source1['euclidean_distance']):
-        score_source1 += 1
-    if (sim1_source2['cosine_similarity'] > sim1_source1['cosine_similarity']):
-        score_source1 += 1
-    if (sim1_source2['mean_squared_error'] < sim1_source1['mean_squared_error']):
-        score_source1 += 1
-
-    # For Source 2 with separated2
-    if (sim2_source1['cross_correlation'] > sim2_source2['cross_correlation']):
-        score_source2 += 1
-    if (sim2_source1['euclidean_distance'] < sim2_source2['euclidean_distance']):
-        score_source2 += 1
-    if (sim2_source1['cosine_similarity'] > sim2_source2['cosine_similarity']):
-        score_source2 += 1
-    if (sim2_source1['mean_squared_error'] < sim2_source2['mean_squared_error']):
-        score_source2 += 1
-    
-    # print(f"Score for Source 1: {score_source1}, Score for Source 2: {score_source2}")
-
-    # Determine if sources need to be swapped based on scores
-    if score_source1 > score_source2:
+    # Determine if sources need to be swapped based on DTW distances
+    if (dtw_source1_separated2 < dtw_source1_separated1) and (dtw_source2_separated1 < dtw_source2_separated2):
         est_sources = torch.stack([est_sources[:, :, 1], est_sources[:, :, 0]], dim=-1)
         print("Sources swapped.")
     
     return est_sources
-
 
 
 
