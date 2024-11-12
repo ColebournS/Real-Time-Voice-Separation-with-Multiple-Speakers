@@ -32,3 +32,4 @@ dist/
 # Results and audio_cache folder
 results/
 audio_cache/
+__pycache__/

@@ -137,9 +137,7 @@ def verify_and_swap_sources(est_sources, separated1, separated2, start_index):
     return est_sources
 
 
-
-
-def separate_audio_windows(mixture_path, clean1_path, clean2_path, window_duration_seconds, overlap_ratio=0.5, results_dir=None):
+def separate_audio_windows(mixture_path, clean1_path, clean2_path, window_duration_seconds, overlap_ratio=0.5, results_dir=None, analyze_by_chunk=False):
     model_names = ["resepformer-wsj02mix"]
     
     try:
@@ -196,6 +194,9 @@ def separate_audio_windows(mixture_path, clean1_path, clean2_path, window_durati
             
             window_function = torch.ones(window_size).unsqueeze(0)
             
+            # Lists to store per-chunk metrics if analyze_by_chunk is True
+            chunk_metrics = [] if analyze_by_chunk else None
+            
             for i in range(num_windows):
                 start_sample = i * hop_size
                 end_sample = min(start_sample + window_size, total_samples)
@@ -219,10 +220,9 @@ def separate_audio_windows(mixture_path, clean1_path, clean2_path, window_durati
                 except Exception as e:
                     print(f"Error separating audio in window {i + 1}: {e}")
                     os.remove(temp_mixture_path)
-                    continue  # Skip this window if separation fails
+                    continue
                 
-                #if the first window then we dont need to try to swap the sources
-                if(i != 0):
+                if i != 0:
                     prev_window_start = max(0, start_sample - current_window_size)
                     est_sources = verify_and_swap_sources(est_sources, separated_1, separated_2, prev_window_start)
                 
@@ -242,6 +242,36 @@ def separate_audio_windows(mixture_path, clean1_path, clean2_path, window_durati
                     separated_2[:, start_sample:end_sample] += est_sources[:, :, 1].detach().cpu()
                     normalization[:, start_sample:end_sample] += window
 
+                # Calculate metrics for this chunk if analyze_by_chunk is True
+                if analyze_by_chunk:
+                    clean1_chunk = clean1[:, start_sample:end_sample]
+                    clean2_chunk = clean2[:, start_sample:end_sample]
+                    clean_reference_chunk = np.stack([clean1_chunk.squeeze().numpy(), 
+                                                    clean2_chunk.squeeze().numpy()])
+                    
+                    # Use the current window's separated sources
+                    if current_window_size < window_size:
+                        sep1_chunk = est_sources[:, :current_window_size, 0].detach().cpu()
+                        sep2_chunk = est_sources[:, :current_window_size, 1].detach().cpu()
+                    else:
+                        sep1_chunk = est_sources[:, :, 0].detach().cpu()
+                        sep2_chunk = est_sources[:, :, 1].detach().cpu()
+                    
+                    separated_sources_chunk = np.stack([sep1_chunk.squeeze().numpy(), 
+                                                      sep2_chunk.squeeze().numpy()])
+                    
+                    chunk_sdr, chunk_sir, chunk_sar, _ = mir_eval.separation.bss_eval_sources(
+                        clean_reference_chunk, separated_sources_chunk)
+                    
+                    chunk_metrics.append({
+                        'window_idx': i,
+                        'start_sample': start_sample,
+                        'end_sample': end_sample,
+                        'sdr': float(np.mean(chunk_sdr)),
+                        'sir': float(np.mean(chunk_sir)),
+                        'sar': float(np.mean(chunk_sar))
+                    })
+
                 os.remove(temp_mixture_path)
                 print(f"Window {i + 1}/{num_windows} processed in {window_time:.2f} seconds")
 
@@ -254,12 +284,13 @@ def separate_audio_windows(mixture_path, clean1_path, clean2_path, window_durati
             torchaudio.save(os.path.join(output_dir, "separated_source_2.wav"), 
                             separated_2, sr1)
 
+            # Calculate overall metrics
             clean_reference = np.stack([clean1.squeeze().numpy(), clean2.squeeze().numpy()])
             separated_sources = np.stack([separated_1.squeeze().numpy(), 
-                                           separated_2.squeeze().numpy()])
+                                        separated_2.squeeze().numpy()])
 
             sdr, sir, sar, _ = mir_eval.separation.bss_eval_sources(clean_reference, 
-                                                                    separated_sources)
+                                                                   separated_sources)
 
             results[model_name] = {
                 'window_duration': window_duration_seconds,
@@ -272,6 +303,15 @@ def separate_audio_windows(mixture_path, clean1_path, clean2_path, window_durati
                 'sir': float(np.mean(sir)),
                 'sar': float(np.mean(sar))
             }
+
+            # Add chunk metrics if analyze_by_chunk is True
+            if analyze_by_chunk:
+                results[model_name]['chunk_metrics'] = chunk_metrics
+                results[model_name]['chunk_average_metrics'] = {
+                    'sdr': float(np.mean([m['sdr'] for m in chunk_metrics])),
+                    'sir': float(np.mean([m['sir'] for m in chunk_metrics])),
+                    'sar': float(np.mean([m['sar'] for m in chunk_metrics]))
+                }
 
         except Exception as e:
             print(f"Error processing model {model_name}: {e}")

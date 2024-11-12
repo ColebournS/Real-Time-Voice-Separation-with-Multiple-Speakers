@@ -16,14 +16,17 @@ results_dir = os.path.join("results", results_name)
 os.makedirs(results_dir, exist_ok=True)
 
 #Window and Overlap settings (min, max, increment)
-window_durations = np.arange(3, 3.5, .1)
+window_durations = np.arange(.5, 3.5, .1)
 overlap_ratios = np.arange(0.0, 0.8, 0.1)
-# window_durations = np.array([2.0])
-# overlap_ratios = np.array([0.0])
+
+#True if you want to calculate chunk metrics indevidually
+analyze_by_chunk = True
 
 # Run the analysis
-results_df = analyze_window_and_overlap(mixture_path, clean1_path, clean2_path, results_dir, window_durations, overlap_ratios)
+results_df, chunk_metrics_df = analyze_window_and_overlap(mixture_path, clean1_path, clean2_path, 
+                                                        results_dir, window_durations, 
+                                                        overlap_ratios, analyze_by_chunk)
 
-# Visualize
-get_and_print_optimal_params(results_df)
-visualize_results(results_df, results_dir)
+# Visualize results
+get_and_print_optimal_params(results_df, chunk_metrics_df if analyze_by_chunk else None)
+visualize_results(results_df, results_dir, chunk_metrics_df if analyze_by_chunk else None)

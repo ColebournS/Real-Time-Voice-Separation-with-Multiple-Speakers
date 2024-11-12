@@ -2,17 +2,9 @@ import os
 import numpy as np
 import pandas as pd
 import json
-import matplotlib.pyplot as plt
-import seaborn as sns
-from matplotlib.gridspec import GridSpec
 from separation import separate_audio_windows
 
-import os
-import pandas as pd
-import json
-import numpy as np
-
-def analyze_window_and_overlap(mixture_path, clean1_path, clean2_path, results_dir, window_durations, overlap_ratios):
+def analyze_window_and_overlap(mixture_path, clean1_path, clean2_path, results_dir, window_durations, overlap_ratios, analyze_by_chunk):
     """
     Analyze performance across different window durations and overlap ratios.
     
@@ -23,8 +15,15 @@ def analyze_window_and_overlap(mixture_path, clean1_path, clean2_path, results_d
         results_dir (str): Directory to store results.
         window_durations (list or np.array): Array of window durations in seconds.
         overlap_ratios (list or np.array): Array of overlap ratios.
+        analyze_by_chunk (bool): True if you want to analyze by chunk false if want to analyze full separation
+        
+    Returns:
+        tuple: (overall_results_df, chunk_metrics_df)
+            - overall_results_df: DataFrame containing overall metrics
+            - chunk_metrics_df: DataFrame containing chunk-wise metrics (None if analyze_by_chunk is False)
     """
     all_results = []
+    all_chunk_metrics = [] if analyze_by_chunk else None
     total_combinations = len(window_durations) * len(overlap_ratios)
     current_combination = 0
 
@@ -48,21 +47,49 @@ def analyze_window_and_overlap(mixture_path, clean1_path, clean2_path, results_d
             try:
                 # Attempt to run separation with the provided parameters
                 results = separate_audio_windows(mixture_path, clean1_path, clean2_path, 
-                                                  duration, overlap, results_dir)
+                                              duration, overlap, results_dir, analyze_by_chunk)
 
                 for model_name, model_results in results.items():
-                    result_entry = {
+                    # Extract and store overall results
+                    overall_result = {
                         'model': model_name,
-                        **model_results
+                        'window_duration': duration,
+                        'overlap_ratio': overlap
                     }
-                    all_results.append(result_entry)
+                    
+                    # Add all metrics except chunk_metrics
+                    for key, value in model_results.items():
+                        if key != 'chunk_metrics':
+                            overall_result[key] = value
+                    
+                    all_results.append(overall_result)
+                    
+                    # Process chunk metrics if available
+                    if analyze_by_chunk and 'chunk_metrics' in model_results:
+                        for chunk_idx, chunk_data in enumerate(model_results['chunk_metrics']):
+                            chunk_entry = {
+                                'model': model_name,
+                                'window_duration': duration,
+                                'overlap_ratio': overlap,
+                                'chunk_index': chunk_idx,
+                                'chunk_sdr': chunk_data['sdr'],
+                                'chunk_sir': chunk_data['sir'],
+                                'chunk_sar': chunk_data['sar'],
+                                'start_sample': chunk_data['start_sample'],
+                                'end_sample': chunk_data['end_sample']
+                            }
+                            all_chunk_metrics.append(chunk_entry)
 
-                # Save intermediate results to CSV and JSON
-                df = pd.DataFrame(all_results)
-                df.to_csv(os.path.join(results_dir, 'window_overlap_analysis_results.csv'), index=False)
+                # Save intermediate results to JSON
+                results_to_save = {
+                    'overall_results': all_results,
+                    'chunk_metrics': all_chunk_metrics if analyze_by_chunk else None
+                }
                 
                 with open(os.path.join(results_dir, 'window_overlap_analysis_results.json'), 'w') as f:
-                    json.dump(all_results, f, indent=4, default=lambda x: int(x) if isinstance(x, (np.integer, np.int64)) else float(x) if isinstance(x, np.floating) else x)
+                    json.dump(results_to_save, f, indent=4, 
+                            default=lambda x: int(x) if isinstance(x, (np.integer, np.int64)) 
+                                            else float(x) if isinstance(x, np.floating) else x)
 
             except FileNotFoundError as fnf_error:
                 print(f"File error: {fnf_error}")
@@ -76,95 +103,8 @@ def analyze_window_and_overlap(mixture_path, clean1_path, clean2_path, results_d
                 print(f"Unexpected error processing combination: {e}")
                 continue
 
-    return pd.DataFrame(all_results)
+    # Convert results to DataFrames
+    overall_df = pd.DataFrame(all_results)
+    chunk_df = pd.DataFrame(all_chunk_metrics) if analyze_by_chunk else None
 
-def visualize_results(df, results_dir):
-    """
-    Create comprehensive visualizations of the window and overlap analysis results.
-    """
-    # Set the style using seaborn's set_style instead of plt.style.use
-    sns.set_style("whitegrid")
-    
-    # Define metrics and their display names
-    metrics = ['sdr', 'sir', 'sar', 'total_separation_time']
-    metric_names = {'sdr': 'SDR (dB)', 'sir': 'SIR (dB)', 'sar': 'SAR (dB)', 
-                    'total_separation_time': 'Processing Time (s)'}
-    
-    for model in df['model'].unique():
-        model_data = df[df['model'] == model]
-        
-        # Create figure with subplots for each metric
-        fig = plt.figure(figsize=(20, 16))
-        gs = GridSpec(2, 2, figure=fig)
-        fig.suptitle(f'Performance Metrics for {model}', size=16, y=0.95)
-        
-        for idx, metric in enumerate(metrics):
-            ax = fig.add_subplot(gs[idx // 2, idx % 2])
-            
-            # Pivot data for heatmap
-            heatmap_data = model_data.pivot(index='window_duration', 
-                                             columns='overlap_ratio',
-                                             values=metric)
-            
-            # Create heatmap with improved aesthetics
-            sns.heatmap(heatmap_data, 
-                        annot=True, 
-                        fmt='.2f', 
-                        cmap='viridis' if metric == 'total_separation_time' else 'RdYlBu',
-                        ax=ax,
-                        cbar_kws={'label': metric_names[metric]})
-            
-            ax.set_title(f'{metric_names[metric]} vs Window Duration and Overlap')
-            ax.set_xlabel('Overlap Ratio')
-            ax.set_ylabel('Window Duration (s)')
-        
-        plt.tight_layout()
-        plt.savefig(os.path.join(results_dir, f'heatmap_analysis_{model}.png'), 
-                    dpi=300, bbox_inches='tight')
-        plt.close()
-        
-        # Create 3D surface plots with improved aesthetics
-        for metric in metrics:
-            fig = plt.figure(figsize=(12, 8))
-            ax = fig.add_subplot(111, projection='3d')
-            
-            X = model_data['window_duration'].values
-            Y = model_data['overlap_ratio'].values
-            Z = model_data[metric].values
-            
-            ax.plot_trisurf(X, Y, Z, cmap='viridis' if metric == 'total_separation_time' else 'RdYlBu', 
-                             linewidth=0.2, antialiased=True)
-            
-            ax.set_title(f'3D Surface Plot of {metric_names[metric]}')
-            ax.set_xlabel('Window Duration (s)')
-            ax.set_ylabel('Overlap Ratio')
-            ax.set_zlabel(metric_names[metric])
-            plt.savefig(os.path.join(results_dir, f'surface_plot_{model}_{metric}.png'), 
-                        dpi=300, bbox_inches='tight')
-            plt.close()
-
-def find_optimal_parameters(df):
-    """
-    Find optimal parameters based on different criteria.
-    """
-    optimal_results = {}
-    
-    for model in df['model'].unique():
-        model_data = df[df['model'] == model]
-        
-        optimal_results[model] = {
-            'best_quality': {
-                'parameters': model_data.loc[model_data['sdr'].idxmax()],
-                'criterion': 'Highest SDR'
-            },
-            'best_efficiency': {
-                'parameters': model_data.loc[model_data['sdr'].div(model_data['total_separation_time']).idxmax()],
-                'criterion': 'Best SDR/Time ratio'
-            },
-            'fastest': {
-                'parameters': model_data.loc[model_data['total_separation_time'].idxmin()],
-                'criterion': 'Fastest processing time'
-            }
-        }
-    
-    return optimal_results
+    return overall_df, chunk_df
