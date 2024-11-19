@@ -7,7 +7,11 @@ import mir_eval
 from math import ceil
 from speechbrain.inference import SepformerSeparation
 import warnings
+from pathlib import Path
+import logging
 
+logging.getLogger("speechbrain.utils.fetching").setLevel(logging.WARNING)
+logging.getLogger('speechbrain').setLevel(logging.WARNING)
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 def compute_similarity_measures(x, y, start_index):
@@ -16,10 +20,10 @@ def compute_similarity_measures(x, y, start_index):
 
         # Slice the larger tensor only to keep the desired segment
         if x.size(0) > y.size(0):
-            print(f"\t\t\tSlicing x from index {start_index} to {start_index + min_length}")
+            #print(f"\t\t\tSlicing x from index {start_index} to {start_index + min_length}")
             x = x[start_index:start_index + min_length]
         else:
-            print(f"\t\t\tSlicing y from index {start_index} to {start_index + min_length}")
+            #print(f"\t\t\tSlicing y from index {start_index} to {start_index + min_length}")
             y = y[start_index:start_index + min_length]
 
         # Center both tensors for correlation computation
@@ -82,25 +86,25 @@ def verify_and_swap_sources(est_sources, separated1, separated2, start_index):
     sim2_source2 = compute_similarity_measures(source2.squeeze(), separated2.squeeze(), start_index)
     
     # Print the similarity measures
-    print(f"Similarity measures for Source 1 with separated1: Cross-correlation = {sim1_source1['cross_correlation'].item():.4f}, "
-          f"Euclidean Distance = {sim1_source1['euclidean_distance'].item():.4f}, "
-          f"Cosine Similarity = {sim1_source1['cosine_similarity'].item():.4f}, "
-          f"MSE = {sim1_source1['mean_squared_error'].item():.4f}")
+    # print(f"Similarity measures for Source 1 with separated1: Cross-correlation = {sim1_source1['cross_correlation'].item():.4f}, "
+    #       f"Euclidean Distance = {sim1_source1['euclidean_distance'].item():.4f}, "
+    #       f"Cosine Similarity = {sim1_source1['cosine_similarity'].item():.4f}, "
+    #       f"MSE = {sim1_source1['mean_squared_error'].item():.4f}")
     
-    print(f"Similarity measures for Source 1 with separated2: Cross-correlation = {sim1_source2['cross_correlation'].item():.4f}, "
-          f"Euclidean Distance = {sim1_source2['euclidean_distance'].item():.4f}, "
-          f"Cosine Similarity = {sim1_source2['cosine_similarity'].item():.4f}, "
-          f"MSE = {sim1_source2['mean_squared_error'].item():.4f}")
+    # print(f"Similarity measures for Source 1 with separated2: Cross-correlation = {sim1_source2['cross_correlation'].item():.4f}, "
+    #       f"Euclidean Distance = {sim1_source2['euclidean_distance'].item():.4f}, "
+    #       f"Cosine Similarity = {sim1_source2['cosine_similarity'].item():.4f}, "
+    #       f"MSE = {sim1_source2['mean_squared_error'].item():.4f}")
 
-    print(f"Similarity measures for Source 2 with separated1: Cross-correlation = {sim2_source1['cross_correlation'].item():.4f}, "
-          f"Euclidean Distance = {sim2_source1['euclidean_distance'].item():.4f}, "
-          f"Cosine Similarity = {sim2_source1['cosine_similarity'].item():.4f}, "
-          f"MSE = {sim2_source1['mean_squared_error'].item():.4f}")
+    # print(f"Similarity measures for Source 2 with separated1: Cross-correlation = {sim2_source1['cross_correlation'].item():.4f}, "
+    #       f"Euclidean Distance = {sim2_source1['euclidean_distance'].item():.4f}, "
+    #       f"Cosine Similarity = {sim2_source1['cosine_similarity'].item():.4f}, "
+    #       f"MSE = {sim2_source1['mean_squared_error'].item():.4f}")
     
-    print(f"Similarity measures for Source 2 with separated2: Cross-correlation = {sim2_source2['cross_correlation'].item():.4f}, "
-          f"Euclidean Distance = {sim2_source2['euclidean_distance'].item():.4f}, "
-          f"Cosine Similarity = {sim2_source2['cosine_similarity'].item():.4f}, "
-          f"MSE = {sim2_source2['mean_squared_error'].item():.4f}")
+    # print(f"Similarity measures for Source 2 with separated2: Cross-correlation = {sim2_source2['cross_correlation'].item():.4f}, "
+    #       f"Euclidean Distance = {sim2_source2['euclidean_distance'].item():.4f}, "
+    #       f"Cosine Similarity = {sim2_source2['cosine_similarity'].item():.4f}, "
+    #       f"MSE = {sim2_source2['mean_squared_error'].item():.4f}")
     
     # Initialize scores
     score_source1 = 0
@@ -127,36 +131,26 @@ def verify_and_swap_sources(est_sources, separated1, separated2, start_index):
     if (sim2_source1['mean_squared_error'] < sim2_source2['mean_squared_error']):
         score_source2 += 1
     
-    # print(f"Score for Source 1: {score_source1}, Score for Source 2: {score_source2}")
-
     # Determine if sources need to be swapped based on scores
     if score_source1 > score_source2:
         est_sources = torch.stack([est_sources[:, :, 1], est_sources[:, :, 0]], dim=-1)
-        print("Sources swapped.")
     
     return est_sources
 
 
-def separate_audio_windows(mixture_path, clean1_path, clean2_path, window_duration_seconds, overlap_ratio=0.5, results_dir=None, analyze_by_chunk=False):
-    model_names = ["resepformer-wsj02mix"]
-    
+def separate_audio_windows(device, mixture_path, clean1_path, clean2_path, model_names, window_duration_seconds, overlap_ratio=0.5, results_dir=None, analyze_by_chunk=False):
+    results = {}
+
     try:
         os.makedirs("models", exist_ok=True)
 
         # Load audio files
-        clean1, sr1 = torchaudio.load(clean1_path)
-        clean2, sr2 = torchaudio.load(clean2_path)
-        mixture, sr_mix = torchaudio.load(mixture_path)
+        clean1, sr1 = torchaudio.load(str(clean1_path))
+        clean2, sr2 = torchaudio.load(str(clean2_path))
+        mixture, sr_mix = torchaudio.load(str(mixture_path))
 
         if sr1 != sr2 or sr1 != sr_mix:
             raise ValueError("Sample rates for audio files do not match.")
-
-    except FileNotFoundError as e:
-        print(f"Audio file not found: {e}")
-        return {}
-    except ValueError as e:
-        print(f"Audio file sampling rate mismatch: {e}")
-        return {}
     except Exception as e:
         print(f"Error loading audio files: {e}")
         return {}
@@ -171,20 +165,17 @@ def separate_audio_windows(mixture_path, clean1_path, clean2_path, window_durati
         print(f"Error calculating window parameters: {e}")
         return {}
 
-    results = {}
     for model_name in model_names:
         try:
             print(f"Processing with {model_name} - Window duration: {window_duration_seconds:.1f}s, Overlap: {overlap_ratio:.1%}")
             model_dir = os.path.join("models", model_name)
-            output_dir = os.path.join(results_dir, model_name, 
-                                       f"window_{window_duration_seconds:.1f}s_overlap_{overlap_ratio:.1%}")
+            output_dir = os.path.join(results_dir, model_name, f"window_{window_duration_seconds:.1f}s_overlap_{overlap_ratio:.1%}")
             
             os.makedirs(output_dir, exist_ok=True)
             os.makedirs(model_dir, exist_ok=True)
 
-            model = SepformerSeparation.from_hparams(source=f"speechbrain/{model_name}", 
-                                                     savedir=model_dir)
-            
+            model = SepformerSeparation.from_hparams(source=f"speechbrain/{model_name}", savedir=model_dir)
+
             separated_1 = torch.zeros(1, total_samples, device=mixture.device)
             separated_2 = torch.zeros(1, total_samples, device=mixture.device)
             normalization = torch.zeros(1, total_samples, device=mixture.device)
@@ -211,17 +202,31 @@ def separate_audio_windows(mixture_path, clean1_path, clean2_path, window_durati
 
                 mixture_window = mixture_window * window
 
-                temp_mixture_path = f"temp_mixture_window_{i}.wav"
-                torchaudio.save(temp_mixture_path, mixture_window, sr1)
+                temp_mixture_path = Path("temp_mixture_window_.wav")
+                temp_mixture_path_str = "temp_mixture_window_.wav"
 
-                start_time = time.time()
                 try:
-                    est_sources = model.separate_file(path=temp_mixture_path)
+                    # Save the temporary mixture window file
+                    torchaudio.save(temp_mixture_path_str, mixture_window, sr1)
+
+                    if not temp_mixture_path.exists():
+                        raise FileNotFoundError(f"Temporary file {temp_mixture_path_str} was not created.")
+
+                    start_time = time.time()
+                    
+                    # Run the separation on the current window
+                    try:
+                            est_sources = model.separate_file(path=temp_mixture_path_str)
+                    except Exception as e:
+                        print(f"Error separating audio in window {i + 1}: {e}")
+
+                except FileNotFoundError as fnf_error:
+                    print(f"File error: {fnf_error}")
+                except PermissionError as perm_error:
+                    print(f"Permission error: {perm_error}")
                 except Exception as e:
-                    print(f"Error separating audio in window {i + 1}: {e}")
-                    os.remove(temp_mixture_path)
-                    continue
-                
+                    print(f"Unexpected error in window {i + 1}: {e}")
+
                 if i != 0:
                     prev_window_start = max(0, start_sample - current_window_size)
                     est_sources = verify_and_swap_sources(est_sources, separated_1, separated_2, prev_window_start)
@@ -260,9 +265,20 @@ def separate_audio_windows(mixture_path, clean1_path, clean2_path, window_durati
                     separated_sources_chunk = np.stack([sep1_chunk.squeeze().numpy(), 
                                                       sep2_chunk.squeeze().numpy()])
                     
-                    chunk_sdr, chunk_sir, chunk_sar, _ = mir_eval.separation.bss_eval_sources(
-                        clean_reference_chunk, separated_sources_chunk)
-                    
+                    swapped_separated_sources_chunk = np.stack([sep2_chunk.squeeze().numpy(), 
+                                                      sep1_chunk.squeeze().numpy()])
+                  
+                    separated_metrics = mir_eval.separation.bss_eval_sources(clean_reference_chunk, separated_sources_chunk)
+                    swapped_metrics = mir_eval.separation.bss_eval_sources(clean_reference_chunk, swapped_separated_sources_chunk)
+
+                    chunk_sdr = max(np.max(separated_metrics[0]), np.max(swapped_metrics[0]))  
+                    chunk_sir = max(np.max(separated_metrics[1]), np.max(swapped_metrics[1]))  
+                    chunk_sar = max(np.max(separated_metrics[2]), np.max(swapped_metrics[2]))
+
+                    chunk_sdr = 0 if np.isnan(chunk_sdr) else chunk_sdr
+                    chunk_sir = 0 if np.isnan(chunk_sir) else chunk_sir
+                    chunk_sar = 0 if np.isnan(chunk_sar) else chunk_sar
+
                     chunk_metrics.append({
                         'window_idx': i,
                         'start_sample': start_sample,
@@ -286,11 +302,9 @@ def separate_audio_windows(mixture_path, clean1_path, clean2_path, window_durati
 
             # Calculate overall metrics
             clean_reference = np.stack([clean1.squeeze().numpy(), clean2.squeeze().numpy()])
-            separated_sources = np.stack([separated_1.squeeze().numpy(), 
-                                        separated_2.squeeze().numpy()])
+            separated_sources = np.stack([separated_1.squeeze().numpy(), separated_2.squeeze().numpy()])
 
-            sdr, sir, sar, _ = mir_eval.separation.bss_eval_sources(clean_reference, 
-                                                                   separated_sources)
+            sdr, sir, sar, _ = mir_eval.separation.bss_eval_sources(clean_reference, separated_sources)
 
             results[model_name] = {
                 'window_duration': window_duration_seconds,

@@ -1,0 +1,25 @@
+from speechbrain.inference import SepformerSeparation
+import torchaudio
+import warnings
+from pathlib import Path
+
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
+# Initialize the Sepformer model
+model = SepformerSeparation.from_hparams(source="speechbrain/sepformer-wsj02mix", savedir="tmpdir")
+
+# Specify the path to the input file
+input_file = Path("/home/ubnt/Real-Time-Voice-Separation-with-Multiple-Speakers/audio/mixture_input.wav")
+
+# Explicitly convert the path to a string
+input_file = str(input_file)
+
+# Perform source separation on the file directly
+print(f"Using file path: {input_file}")
+separated_sources = model.separate_file(input_file)
+
+# Save the separated audio to files
+for i, source in enumerate(separated_sources):
+    torchaudio.save(f"separated_source_{i}.wav", source, 16000)  # Assuming sample_rate of 16000
+
+print("Separation completed!")

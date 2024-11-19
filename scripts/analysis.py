@@ -4,7 +4,7 @@ import pandas as pd
 import json
 from separation import separate_audio_windows
 
-def analyze_window_and_overlap(mixture_path, clean1_path, clean2_path, results_dir, window_durations, overlap_ratios, analyze_by_chunk):
+def analyze_window_and_overlap(device, mixture_path, clean1_path, clean2_path, model_names, results_dir, window_durations, overlap_ratios, analyze_by_chunk):
     """
     Analyze performance across different window durations and overlap ratios.
     
@@ -44,64 +44,55 @@ def analyze_window_and_overlap(mixture_path, clean1_path, clean2_path, results_d
             print(f"\nProcessing combination {current_combination}/{total_combinations}")
             print(f"Window duration: {duration:.1f}s, Overlap: {overlap:.1%}")
 
+            results = {}
+            # Attempt to run separation with the provided parameters
             try:
-                # Attempt to run separation with the provided parameters
-                results = separate_audio_windows(mixture_path, clean1_path, clean2_path, 
-                                              duration, overlap, results_dir, analyze_by_chunk)
+                results = separate_audio_windows(device, mixture_path, clean1_path, clean2_path, model_names,
+                                                duration, overlap, results_dir, analyze_by_chunk)
+            except Exception as e:
+                print(f"An unexpected error occurred: {e}")
 
-                for model_name, model_results in results.items():
-                    # Extract and store overall results
-                    overall_result = {
-                        'model': model_name,
-                        'window_duration': duration,
-                        'overlap_ratio': overlap
-                    }
-                    
-                    # Add all metrics except chunk_metrics
-                    for key, value in model_results.items():
-                        if key != 'chunk_metrics':
-                            overall_result[key] = value
-                    
-                    all_results.append(overall_result)
-                    
-                    # Process chunk metrics if available
-                    if analyze_by_chunk and 'chunk_metrics' in model_results:
-                        for chunk_idx, chunk_data in enumerate(model_results['chunk_metrics']):
-                            chunk_entry = {
-                                'model': model_name,
-                                'window_duration': duration,
-                                'overlap_ratio': overlap,
-                                'chunk_index': chunk_idx,
-                                'chunk_sdr': chunk_data['sdr'],
-                                'chunk_sir': chunk_data['sir'],
-                                'chunk_sar': chunk_data['sar'],
-                                'start_sample': chunk_data['start_sample'],
-                                'end_sample': chunk_data['end_sample']
-                            }
-                            all_chunk_metrics.append(chunk_entry)
-
-                # Save intermediate results to JSON
-                results_to_save = {
-                    'overall_results': all_results,
-                    'chunk_metrics': all_chunk_metrics if analyze_by_chunk else None
+            for model_name, model_results in results.items():
+                # Extract and store overall results
+                overall_result = {
+                    'model': model_name,
+                    'window_duration': duration,
+                    'overlap_ratio': overlap
                 }
                 
-                with open(os.path.join(results_dir, 'window_overlap_analysis_results.json'), 'w') as f:
-                    json.dump(results_to_save, f, indent=4, 
-                            default=lambda x: int(x) if isinstance(x, (np.integer, np.int64)) 
-                                            else float(x) if isinstance(x, np.floating) else x)
+                # Add all metrics except chunk_metrics
+                for key, value in model_results.items():
+                    if key != 'chunk_metrics':
+                        overall_result[key] = value
+                
+                all_results.append(overall_result)
+                
+                # Process chunk metrics if available
+                if analyze_by_chunk and 'chunk_metrics' in model_results:
+                    for chunk_idx, chunk_data in enumerate(model_results['chunk_metrics']):
+                        chunk_entry = {
+                            'model': model_name,
+                            'window_duration': duration,
+                            'overlap_ratio': overlap,
+                            'chunk_index': chunk_idx,
+                            'chunk_sdr': chunk_data['sdr'],
+                            'chunk_sir': chunk_data['sir'],
+                            'chunk_sar': chunk_data['sar'],
+                            'start_sample': chunk_data['start_sample'],
+                            'end_sample': chunk_data['end_sample']
+                        }
+                        all_chunk_metrics.append(chunk_entry)
 
-            except FileNotFoundError as fnf_error:
-                print(f"File error: {fnf_error}")
-            except ValueError as val_error:
-                print(f"Value error: {val_error}")
-            except TypeError as type_error:
-                print(f"Type error: {type_error}")
-            except json.JSONDecodeError as json_error:
-                print(f"JSON error: {json_error}")
-            except Exception as e:
-                print(f"Unexpected error processing combination: {e}")
-                continue
+            # Save intermediate results to JSON
+            results_to_save = {
+                'overall_results': all_results,
+                'chunk_metrics': all_chunk_metrics if analyze_by_chunk else None
+            }
+            
+            with open(os.path.join(results_dir, 'window_overlap_analysis_results.json'), 'w') as f:
+                json.dump(results_to_save, f, indent=4, 
+                        default=lambda x: int(x) if isinstance(x, (np.integer, np.int64)) 
+                                        else float(x) if isinstance(x, np.floating) else x)
 
     # Convert results to DataFrames
     overall_df = pd.DataFrame(all_results)

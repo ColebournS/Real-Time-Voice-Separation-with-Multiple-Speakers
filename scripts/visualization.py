@@ -154,23 +154,23 @@ def get_and_print_optimal_params(df, chunk_metrics=None):
                 print(f"Overall SDR: {params['sdr']:.2f} dB")
                 print(f"Processing Time: {params['total_separation_time']:.2f}s")
                 
-                # Print chunk-based metrics if available
-                if chunk_metrics is not None:
-                    chunk_data = chunk_metrics[
-                        (chunk_metrics['model'] == model) &
-                        (chunk_metrics['window_duration'] == params['window_duration']) &
-                        (chunk_metrics['overlap_ratio'] == params['overlap_ratio'])
-                    ]
-                    
-                    if not chunk_data.empty:
-                        print("\nChunk-based Metrics:")
-                        for metric in ['sdr', 'sir', 'sar']:
-                            values = chunk_data[f'chunk_{metric}']
-                            print(f"Chunk {metric.upper()}:")
-                            print(f"  Mean: {values.mean():.2f} dB")
-                            print(f"  Std: {values.std():.2f} dB")
-                            print(f"  Min: {values.min():.2f} dB")
-                            print(f"  Max: {values.max():.2f} dB")
+            # Print chunk-based metrics if available
+            if chunk_metrics is not None:
+                chunk_data = chunk_metrics[
+                    (chunk_metrics['model'] == model) &
+                    (chunk_metrics['window_duration'] == params['window_duration']) &
+                    (chunk_metrics['overlap_ratio'] == params['overlap_ratio'])
+                ]
+                
+                if not chunk_data.empty:
+                    print("\nChunk-based Metrics:")
+                    for metric in ['sdr', 'sir', 'sar']:
+                        values = chunk_data[f'chunk_{metric}']
+                        print(f"Chunk {metric.upper()}:")
+                        print(f"  Mean: {values.mean():.2f} dB")
+                        print(f"  Std: {values.std():.2f} dB")
+                        print(f"  Min: {values.min():.2f} dB")
+                        print(f"  Max: {values.max():.2f} dB")
     
     except Exception as e:
         print(f"Error in finding optimal parameters: {e}")
