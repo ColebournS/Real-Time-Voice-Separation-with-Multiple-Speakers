@@ -138,8 +138,12 @@ def verify_and_swap_sources(est_sources, separated1, separated2, start_index):
     return est_sources
 
 
-def separate_audio_windows(device, mixture_path, clean1_path, clean2_path, model_names, window_duration_seconds, overlap_ratio=0.5, results_dir=None, analyze_by_chunk=False):
+def separate_audio_windows(device, mixture_path, clean1_path, clean2_path, model_names, window_duration_seconds, overlap_ratio, results_dir, analyze_by_chunk, save_separated_files):
     results = {}
+    
+    # print(mixture_path)
+    # print(clean1_path)
+    # print(clean2_path)
 
     try:
         os.makedirs("models", exist_ok=True)
@@ -289,16 +293,20 @@ def separate_audio_windows(device, mixture_path, clean1_path, clean2_path, model
                     })
 
                 os.remove(temp_mixture_path)
-                print(f"Window {i + 1}/{num_windows} processed in {window_time:.2f} seconds")
+                #print(f"Window {i + 1}/{num_windows} processed in {window_time:.2f} seconds")
 
             eps = 1e-10
             separated_1 = separated_1 / (normalization + eps)
             separated_2 = separated_2 / (normalization + eps)
 
-            torchaudio.save(os.path.join(output_dir, "separated_source_1.wav"), 
-                            separated_1, sr1)
-            torchaudio.save(os.path.join(output_dir, "separated_source_2.wav"), 
-                            separated_2, sr1)
+            if save_separated_files:
+                mixture_name = Path(mixture_path).stem
+                output_subdir = os.path.join(output_dir, mixture_name)
+                os.makedirs(output_subdir, exist_ok=True)
+
+                # Save audio files
+                torchaudio.save(os.path.join(output_subdir, "separated_source_1.wav"), separated_1, sr1)
+                torchaudio.save(os.path.join(output_subdir, "separated_source_2.wav"), separated_2, sr1)
 
             # Calculate overall metrics
             clean_reference = np.stack([clean1.squeeze().numpy(), clean2.squeeze().numpy()])

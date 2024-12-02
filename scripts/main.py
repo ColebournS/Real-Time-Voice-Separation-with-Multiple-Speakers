@@ -9,23 +9,34 @@ import torch
 from analysis import analyze_window_and_overlap
 from visualization import visualize_results, get_and_print_optimal_params
 
+def get_first_n_files(directory, n):
+    files = sorted(Path(directory).glob("*"))
+    return files[:n] if files else []
+
 # CONSTANTS AND SETTINGS
+MODEL_NAMES = ["resepformer-wsj02mix"]
+WINDOW_DURATIONS = np.arange(.5, 4, .5)
+OVERLAP_RATIOS = np.arange(0.0, 0.6, 0.2)
+ANALYZE_BY_CHUNK = True
+SAVE_SEPARATED_FILES = True
+NUMBER_OF_FILES = 20
+
+MIXTURE_DIR = "/home/ubnt/storage/Libri2Mix/wav8k/min/test/mix_both"
+CLEAN1_DIR = "/home/ubnt/storage/Libri2Mix/wav8k/min/test/s1"
+CLEAN2_DIR = "/home/ubnt/storage/Libri2Mix/wav8k/min/test/s2"
+
+mixture_files = get_first_n_files(MIXTURE_DIR, NUMBER_OF_FILES)
+clean1_files = get_first_n_files(CLEAN1_DIR, NUMBER_OF_FILES)
+clean2_files = get_first_n_files(CLEAN2_DIR, NUMBER_OF_FILES)
+    
 AUDIO_DATA = [
     {
-        "mixture": Path("/home/ubnt/Real-Time-Voice-Separation-with-Multiple-Speakers/audio/mixture_input.wav"),
-        "clean1": Path("/home/ubnt/Real-Time-Voice-Separation-with-Multiple-Speakers/audio/clean1.wav"),
-        "clean2": Path("/home/ubnt/Real-Time-Voice-Separation-with-Multiple-Speakers/audio/clean2.wav"),
-    },
-    {
-        "mixture": Path("/home/ubnt/storage/Libri2Mix/wav8k/min/test/mix_both/61-70968-0000_8455-210777-0012.wav"),
-        "clean1": Path("/home/ubnt/storage/Libri2Mix/wav8k/min/test/s1/61-70968-0000_8455-210777-0012.wav"),
-        "clean2": Path("/home/ubnt/storage/Libri2Mix/wav8k/min/test/s2/61-70968-0000_8455-210777-0012.wav"),
-    },
+        "mixture": mixture_file,
+        "clean1": clean1_file,
+        "clean2": clean2_file,
+    }
+    for mixture_file, clean1_file, clean2_file in zip(mixture_files, clean1_files, clean2_files)
 ]
-MODEL_NAMES = ["resepformer-wsj02mix"]
-WINDOW_DURATIONS = np.arange(1, 3, 1)
-OVERLAP_RATIOS = np.arange(0.0, 0.5, 0.3)
-ANALYZE_BY_CHUNK = True
 
 # DEVICE SETUP
 if torch.cuda.is_available():
@@ -46,8 +57,8 @@ all_results_df = []
 all_chunk_metrics_df = []
 
 # PROCESS AUDIO DATA
-for audio_files in AUDIO_DATA:
-    print(f"\nProcessing mixture: {audio_files['mixture']}")
+for idx, audio_files in enumerate(AUDIO_DATA, start=1):
+    print(f"\nProcessing file {idx}/{len(AUDIO_DATA)}: {audio_files['mixture']}")
     results_df, chunk_metrics_df = analyze_window_and_overlap(
         DEVICE,
         audio_files["mixture"],
@@ -58,15 +69,16 @@ for audio_files in AUDIO_DATA:
         WINDOW_DURATIONS,
         OVERLAP_RATIOS,
         ANALYZE_BY_CHUNK,
+        SAVE_SEPARATED_FILES
     )
     if results_df is not None:
         all_results_df.append(results_df)
     if ANALYZE_BY_CHUNK and chunk_metrics_df is not None:
         all_chunk_metrics_df.append(chunk_metrics_df)
 
+
 # AVERAGE AND VISUALIZE RESULTS
 if all_results_df:
-    # Group by model, window_duration, and overlap_ratio, then calculate mean of numeric columns
     numeric_columns = [
         "sdr",
         "sir",
@@ -79,7 +91,6 @@ if all_results_df:
         ["model", "window_duration", "overlap_ratio"]
     )[numeric_columns].mean().reset_index()
 
-    # Handle chunk metrics if they exist
     average_chunk_metrics_df = None
     if ANALYZE_BY_CHUNK and all_chunk_metrics_df:
         numeric_chunk_columns = ["chunk_sdr", "chunk_sir", "chunk_sar"]

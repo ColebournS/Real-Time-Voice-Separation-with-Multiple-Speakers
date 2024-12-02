@@ -4,7 +4,7 @@ import pandas as pd
 import json
 from separation import separate_audio_windows
 
-def analyze_window_and_overlap(device, mixture_path, clean1_path, clean2_path, model_names, results_dir, window_durations, overlap_ratios, analyze_by_chunk):
+def analyze_window_and_overlap(device, mixture_path, clean1_path, clean2_path, model_names, results_dir, window_durations, overlap_ratios, analyze_by_chunk, save_separated_files):
     """
     Analyze performance across different window durations and overlap ratios.
     
@@ -42,13 +42,12 @@ def analyze_window_and_overlap(device, mixture_path, clean1_path, clean2_path, m
         for overlap in overlap_ratios:
             current_combination += 1
             print(f"\nProcessing combination {current_combination}/{total_combinations}")
-            print(f"Window duration: {duration:.1f}s, Overlap: {overlap:.1%}")
 
             results = {}
             # Attempt to run separation with the provided parameters
             try:
                 results = separate_audio_windows(device, mixture_path, clean1_path, clean2_path, model_names,
-                                                duration, overlap, results_dir, analyze_by_chunk)
+                                                duration, overlap, results_dir, analyze_by_chunk, save_separated_files)
             except Exception as e:
                 print(f"An unexpected error occurred: {e}")
 
